@@ -1,9 +1,6 @@
 using System;
-using System.Collections.Generic;
 using System.Diagnostics;
-using System.Globalization;
 using System.IO;
-using System.Linq;
 using static System.Console;
 using static System.Convert;
 
@@ -11,31 +8,6 @@ namespace Listdemo
 {
     public class Program
     {
-        private static string Fend(DemoParseResult c)
-        {
-            var z = new List<string>
-            {
-                c.GameName,
-                c.PlayerName,
-                c.TotalTicks.ToString(),
-                c.TotalTime.ToString(CultureInfo.InvariantCulture).Replace('.',','),
-                c.MapName,
-                c.TotalJumps.ToString(),
-                c.Pframes,
-                c.Pticks,
-                c.Protocol,
-                c.NProtocol,
-                c.ServerName,
-                c.X.ToString(CultureInfo.InvariantCulture),
-                c.Y.ToString(CultureInfo.InvariantCulture),
-                c.Z.ToString(CultureInfo.InvariantCulture),
-                $"{c.TotalTime: #,0.000}"
-            };
-            var qry = z.OrderByDescending(j => j.Length).First().Length + 3;
-            const string temp = "                                      ";
-            return temp.Substring(0, qry);
-        }
-
         private static void Main(string[] args)
         {
             Title = "λ - Sourceruns listdemo by Traderain - λ";
@@ -59,8 +31,6 @@ namespace Listdemo
                 {
                     var a = DemoParser.ParseDemo(args[0]);
                     ForegroundColor = ConsoleColor.White;
-                    var longeststring = Fend(a);
-                    var bord = new string(longeststring.Select(r => '─').ToArray());
                     #region print
                     WriteLine("Analyzed demo. Results.");
                     WriteLine($@"
