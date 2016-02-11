@@ -1,9 +1,11 @@
 using System;
 using System.Collections.Generic;
-using System.Globalization;
 using System.IO;
 using System.Linq;
-using System.Text;
+using static System.Text.Encoding;
+using static System.Math;
+using static System.BitConverter;
+using static System.Globalization.CultureInfo;
 
 namespace Listdemo
 {
@@ -15,8 +17,8 @@ namespace Listdemo
 
         public Flag(int t, float s, string type)
         {
-            Ticks = Convert.ToString(t);
-            Time = Convert.ToString(s, CultureInfo.InvariantCulture) + "s";
+            Ticks = t.ToString();
+            Time = s.ToString(InvariantCulture) + "s";
             Type = type;
         }
     }
@@ -30,19 +32,19 @@ namespace Listdemo
             using (var fs = new FileStream(file, FileMode.Open, FileAccess.Read))
             using (var br = new BinaryReader(fs))
             {
-                var identifier = Encoding.ASCII.GetString(br.ReadBytes(8)).TrimEnd('\0'); // skip identifier
+                var identifier = ASCII.GetString(br.ReadBytes(8)).TrimEnd('\0');
                 if (identifier != "HL2DEMO")
                     throw new Exception("Not a demo");
-                result.Protocol = (BitConverter.ToInt32(br.ReadBytes(4), 0)).ToString(CultureInfo.InvariantCulture);
-                result.NProtocol = (BitConverter.ToInt32(br.ReadBytes(4), 0)).ToString(CultureInfo.InvariantCulture);
-                result.ServerName = Encoding.ASCII.GetString(br.ReadBytes(260)).TrimEnd('\0');
-                result.PlayerName = Encoding.ASCII.GetString(br.ReadBytes(260)).TrimEnd('\0');
-                result.MapName = Encoding.ASCII.GetString(br.ReadBytes(260)).TrimEnd('\0');
-                result.GameName = Encoding.ASCII.GetString(br.ReadBytes(260)).TrimEnd('\0'); // gamedir=gamename
+                result.Protocol = (ToInt32(br.ReadBytes(4), 0)).ToString(InvariantCulture);
+                result.NProtocol = (ToInt32(br.ReadBytes(4), 0)).ToString(InvariantCulture);
+                result.ServerName = ASCII.GetString(br.ReadBytes(260)).TrimEnd('\0');
+                result.PlayerName = ASCII.GetString(br.ReadBytes(260)).TrimEnd('\0');
+                result.MapName = ASCII.GetString(br.ReadBytes(260)).TrimEnd('\0');
+                result.GameName = ASCII.GetString(br.ReadBytes(260)).TrimEnd('\0'); // gamedir=gamename
 
-                result.PTime = (Math.Abs(BitConverter.ToInt32(br.ReadBytes(4), 0))).ToString(CultureInfo.InvariantCulture);
-                result.Pticks = (Math.Abs(BitConverter.ToInt32(br.ReadBytes(4), 0))).ToString(CultureInfo.InvariantCulture);
-                result.Pframes = (Math.Abs(BitConverter.ToInt32(br.ReadBytes(4), 0))).ToString(CultureInfo.InvariantCulture);
+                result.PTime = (Abs(ToInt32(br.ReadBytes(4), 0))).ToString(InvariantCulture);
+                result.Pticks = (Abs(ToInt32(br.ReadBytes(4), 0))).ToString(InvariantCulture);
+                result.Pframes = (Abs(ToInt32(br.ReadBytes(4), 0))).ToString(InvariantCulture);
                 var signOnLen = br.ReadInt32();
                 result.Flags = new List<Flag>();
                 result.Cheetz = new List<string>();
@@ -87,8 +89,7 @@ namespace Listdemo
                         case 0x04:
                         {
                             var concmdLen = br.ReadInt32();
-                            var concmd = Encoding.ASCII.GetString(br.ReadBytes(concmdLen - 1));
-                            //Handling that damm save flag everyone asked about
+                            var concmd = ASCII.GetString(br.ReadBytes(concmdLen - 1));
                             if (concmd.Contains("#SAVE#"))
                             {
                                 if (tick >= 0)
@@ -109,13 +110,7 @@ namespace Listdemo
                                     result.Flags.Add(new Flag(tick, tick*0.015f, "autosave"));
                                 }
                             }
-                            // haaaaaaaaaaack
-                            if (result.MapName == "escape_02" && concmd == "startneurotoxins 99999")
-                            {
-                                result.CrosshairDisappearTick = tick + 1;
-                            }
                             if (concmd.StartsWith("+jump")) result.TotalJumps++;
-                            //ADD ALL THE COMMANDS YOU WANT
                             br.BaseStream.Seek(1, SeekOrigin.Current); // skip null terminator
                         }
                             break;
