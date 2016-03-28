@@ -1,6 +1,7 @@
 using System;
 using System.Diagnostics;
 using System.IO;
+using System.Linq;
 using static System.Console;
 using static System.Convert;
 
@@ -15,7 +16,6 @@ namespace Listdemo
             try
             {
                 datapath = args[0];
-
             }
             catch (Exception e)
             {
@@ -32,7 +32,7 @@ namespace Listdemo
                     var a = DemoParser.ParseDemo(args[0]);
                     ForegroundColor = ConsoleColor.White;
                     #region print
-                    WriteLine("Analyzed demo. Results.");
+                    WriteLine(@"Analyzed demo. Results.");
                     WriteLine($@"
 Demoname:		: {Path.GetFileName(datapath)}
 GameName		: {a.GameName}
@@ -95,8 +95,9 @@ Z			: {a.Z}");
                         try
                         {
                             convert = ToInt32(ReadLine());
+                            var time = (a.Flags.Count(x => x.Type.Contains("SAVE")) == 0) ? a.TotalTime.ToString("#,0.000") : a.Flags.First(x => x.Type.Contains("SAVE")).Time.ToString("#,0.000");
                             File.Move(datapath, convert + "-" + a.MapName.Substring(3,a.MapName.Length-3) + "-" +
-                                                $"{a.TotalTime:#,0.000}" + "-" + a.PlayerName + ".dem");
+                                                $"{time}" + "-" + a.PlayerName + ".dem");
                         }
                         catch(Exception e)
                         {
