@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -11,14 +11,14 @@ namespace Listdemo
 {
     public class Flag
     {
-        public string Ticks { get; set; }
-        public string Time { get; set; }
+        public int Ticks { get; set; }
+        public float Time { get; set; }
         public string Type { get; set; }
 
         public Flag(int t, float s, string type)
         {
-            Ticks = t.ToString();
-            Time = s.ToString(InvariantCulture) + "s";
+            Ticks = t;
+            Time = s;
             Type = type;
         }
     }
