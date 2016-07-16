@@ -9,3 +9,4 @@ Its an easy to use .dem file analyzer. Just drag&drop your .dem files on it.
 #Credits
   - https://github.com/fatalis/SourceSplit
   - https://sourceruns.org/index.php?topic=995.0
+  - YaLTeR for the DLL to parse goldsource demos.
