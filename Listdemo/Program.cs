@@ -2,6 +2,7 @@
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Runtime.InteropServices;
 using static System.Console;
 using static System.Convert;
 
@@ -25,89 +26,180 @@ namespace Listdemo
                     datapath = Environment.CurrentDirectory;
                 }
             }
-            if (datapath == null) return;
-            {
-                if (Path.GetExtension(datapath) == ".dem")
+            if (Path.GetExtension(datapath) == ".dem")
                 {
-                    var a = DemoParser.ParseDemo(args[0]);
+                    var a = DemoParser.ParseDemo(datapath);
                     ForegroundColor = ConsoleColor.White;
+                    bool valid = true;
                     #region print
-                    WriteLine(@"Analyzed demo. Results.");
-                    WriteLine($@"
+
+                    switch (a.DemoT)
+                    {
+                        case DemoParseResult.DemoType.Goldsource:
+                        {
+                            #region GoldSource print
+                            Console.WriteLine("Analyzed goldsource demo. Results:");
+                            Console.WriteLine($@"
+Demo name           :   {Path.GetFileName(datapath)}
+Game name           :   {a.GameName}
+Map name            :   {a.MapName}
+Map CRC             :   {a.MapCrc}
+Demo protocol       :   {a.Protocol}
+Network protocol    :   {a.NProtocol}
+Directory Offset    :   {a.DOffset}
+Playback frames	    :   {a.Pframes}
+Time                :   {a.TotalTime}s
+");
+                            if (a.Flags != null)
+                            {
+                                if (a.Flags.Count != 0)
+                                {
+                                    WriteLine("-------------- Detected Flags ------------");
+                                    foreach (var b in a.Flags)
+                                    {
+                                        ForegroundColor = ConsoleColor.Yellow;
+                                        WriteLine("Detected {0} flag. Time to flag is:  {1}s in {2} ticks.", b.Type, b.Time,
+                                            b.Ticks);
+                                    }
+                                }
+                                else
+                                {
+                                    WriteLine("No save flags detected!");
+                                }
+
+                            }
+                            else
+                            {
+                                ForegroundColor = ConsoleColor.Green;
+                                WriteLine("No flags detected!");
+                            }
+                            if (a.Cheated)
+                            {
+                                ForegroundColor = ConsoleColor.White;
+                                WriteLine("----------------- Cheats ----------------");
+                                ForegroundColor = ConsoleColor.Red;
+                                WriteLine("The speedrun police is after you for: ");
+                                Array.ForEach(a.Cheetz.ToArray(), WriteLine);
+                            }
+                            else
+                            {
+                                ForegroundColor = ConsoleColor.White;
+                                Write("No cheats detected: ");
+                                ForegroundColor = ConsoleColor.Green;
+                                Write("OK");
+                            }
+                            #endregion
+                            break;
+                        }
+                        case DemoParseResult.DemoType.Source:
+                        {
+                            #region sourceprint
+                            WriteLine(@"Analyzed source demo. Results.");
+                            WriteLine(
+                                $@"
 Demoname:		: {Path.GetFileName(datapath)}
 GameName		: {a.GameName}
-PlayerName		: {a.PlayerName}
+PlayerName		: {
+                                    a.PlayerName}
 Ticks			: {a.TotalTicks}
 Time			: {a.TotalTime}s
-MapName			: {a.MapName}
+MapName			: {a.MapName
+                                    }
 Jumps			: {a.TotalJumps}
 Playback time		: {a.PTime: #,0.000}
-Playback frames		: {a.Pframes}
+Playback frames		: {a.Pframes
+                                    }
 Playback ticks		: {a.Pticks}
 Protocol		: {a.Protocol}
-Network protocol	: {a.NProtocol}
+Network protocol	: {a.NProtocol
+                                    }
 Server Name		: {a.ServerName}
 X			: {a.X}
 Y			: {a.Y}
 Z			: {a.Z}");
-                    if (a.Flags != null)
-                    {
-                        if (a.Flags.Count != 0)
-                        {
-                            WriteLine("-------------- Detected Flags ------------");
-                            foreach (var b in a.Flags)
+                            if (a.Flags != null)
                             {
-                                ForegroundColor = ConsoleColor.Yellow;
-                                WriteLine("Detected {0} flag. Time to flag is:  {1}s in {2} ticks.", b.Type, b.Time, b.Ticks);
-                            }
-                        }
-                        else
-                        {
-                            WriteLine("No save flags detected!");
-                        }
+                                if (a.Flags.Count != 0)
+                                {
+                                    WriteLine("-------------- Detected Flags ------------");
+                                    foreach (var b in a.Flags)
+                                    {
+                                        ForegroundColor = ConsoleColor.Yellow;
+                                        WriteLine("Detected {0} flag. Time to flag is:  {1}s in {2} ticks.", b.Type, b.Time,
+                                            b.Ticks);
+                                    }
+                                }
+                                else
+                                {
+                                    WriteLine("No save flags detected!");
+                                }
 
+                            }
+                            else
+                            {
+                                ForegroundColor = ConsoleColor.Green;
+                                WriteLine("No flags detected!");
+                            }
+                            if (a.Cheated)
+                            {
+                                ForegroundColor = ConsoleColor.White;
+                                WriteLine("----------------- Cheats ----------------");
+                                ForegroundColor = ConsoleColor.Red;
+                                WriteLine("The speedrun police is after you for: ");
+                                Array.ForEach(a.Cheetz.ToArray(), WriteLine);
+                            }
+                            else
+                            {
+                                ForegroundColor = ConsoleColor.White;
+                                Write("No cheats detected: ");
+                                ForegroundColor = ConsoleColor.Green;
+                                Write("OK");
+                            }
+                            #endregion
+                            break;
+                        }
+                        default:
+                        {
+                            valid = false;
+                            WriteLine("I am really sorry but we can't analyze your demo. :\\");
+                            WriteLine("Be sure to make an issue at \"https://github.com/Traderain/Listdemo-\"");
+                            break;
+                        }
                     }
-                    else
-                    {
-                        ForegroundColor = ConsoleColor.Green;
-                        WriteLine("No flags detected!");
-                    }
-                    if (a.Cheated)
-                    {
-                        ForegroundColor = ConsoleColor.White;
-                        WriteLine("----------------- Cheats ----------------");
-                        ForegroundColor = ConsoleColor.Red;
-                        WriteLine("The speedrun police is after you for: ");
-                        Array.ForEach(a.Cheetz.ToArray(), WriteLine);
-                    }
-                    else
-                    {
-                        ForegroundColor = ConsoleColor.White;
-                        Write("No cheats detected: ");
-                        ForegroundColor = ConsoleColor.Green;
-                        Write("OK");
-                    }
-                    #endregion
                     WriteLine();
-                    int? convert = null;
-                    while (convert == null)
+                    #endregion
+                    string convert = "";
+                    if (valid)
+                    {
+                        #region rename
+                    while (convert == "")
                     {
                         try
                         {
-                            convert = ToInt32(ReadLine());
-                            var time = (a.Flags.Count(x => x.Type.Contains("SAVE")) == 0) ? a.TotalTime.ToString("#,0.000") : a.Flags.First(x => x.Type.Contains("SAVE")).Time.ToString("#,0.000");
-                            File.Move(datapath, convert + "-" + a.MapName.Substring(3,a.MapName.Length-3) + "-" +
+                            convert = ReadLine();
+                            var time = (a.Flags.Count(x => x.Type.Contains("SAVE")) == 0)
+                                ? a.TotalTime.ToString("#,0.000")
+                                : a.Flags.First(x => x.Type.Contains("SAVE")).Time.ToString("#,0.000");
+                            File.Move(datapath, convert + "-" + a.MapName.Substring(3, a.MapName.Length - 3) + "-" +
                                                 $"{time}" + "-" + a.PlayerName + ".dem");
                         }
-                        catch(Exception e)
+                        catch (Exception e)
                         {
                             if (e is FormatException)
                             {
-                                //throw new Exception(e.Message);
+                                //TODO: fancy error
                             }
-                            // Log failure
+                            Console.WriteLine(e.Message);
                         }
                     }
+                    #endregion
+                    }
+                    else
+                    {
+                        WriteLine("Press any key to exit...");
+                        ReadKey();
+                    }
+                    
                 }
                 else
                 {
@@ -206,4 +298,3 @@ Centaur1um for this awesome community.");
             }
         }
     }
-}
