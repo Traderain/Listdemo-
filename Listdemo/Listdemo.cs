@@ -2,7 +2,6 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using static System.Text.Encoding;
 using static System.Math;
@@ -13,22 +12,259 @@ namespace Listdemo
 {
     public class Flag
     {
-        public int Ticks { get; set; }
-        public float Time { get; set; }
-        public string Type { get; set; }
-
         public Flag(int t, float s, string type) //Flags like #SAVE# (in segmented).
         {
             Ticks = t;
             Time = s;
             Type = type;
         }
+
+        public int Ticks { get; set; }
+        public float Time { get; set; }
+        public string Type { get; set; }
     }
 
 
     public class DemoParser
     {
+        public enum DEMO_TYPE
+        {
+            Source,
+            Goldsource,
+            Unknown
+        }
+
+        public static string[] cheats =
+        {
+            "host_timescale", "god", "sv_cheats", "buddha", "host_framerate", "sv_accelerate",
+            "sv_airaccelerate", "noclip", "ent_fire"
+        };
+
+        public static SourceDemoParseResult ParseDemo(string file, DEMO_TYPE DemoType)
+        {
+            var result = new SourceDemoParseResult();
+
+            #region Source Demo Parser
+
+            try
+            {
+                using (var fs = new FileStream(file, FileMode.Open, FileAccess.Read))
+                using (var br = new BinaryReader(fs))
+                {
+                    #region Original HL2 Demo Parser
+
+                    ASCII.GetString(br.ReadBytes(8)).TrimEnd('\0');
+                    result.Protocol = (ToInt32(br.ReadBytes(4), 0)).ToString(InvariantCulture);
+                    result.NProtocol = (ToInt32(br.ReadBytes(4), 0)).ToString(InvariantCulture);
+                    result.ServerName = ASCII.GetString(br.ReadBytes(260)).TrimEnd('\0');
+                    result.PlayerName = ASCII.GetString(br.ReadBytes(260)).TrimEnd('\0');
+                    result.MapName = ASCII.GetString(br.ReadBytes(260)).TrimEnd('\0');
+                    result.GameName = ASCII.GetString(br.ReadBytes(260)).TrimEnd('\0'); // gamedir=gamename
+
+                    result.PTime = (Abs(ToInt32(br.ReadBytes(4), 0))).ToString(InvariantCulture);
+                    result.Pticks = (Abs(ToInt32(br.ReadBytes(4), 0))).ToString(InvariantCulture);
+                    result.Pframes = (Abs(ToInt32(br.ReadBytes(4), 0))).ToString(InvariantCulture);
+                    var signOnLen = br.ReadInt32();
+                    result.Flags = new List<Flag>();
+                    result.Cheetz = new List<string>();
+                    result.CoordsList = new List<Point3D>();
+
+                    byte command;
+                    do
+                    {
+                        command = br.ReadByte();
+
+                        if (command == 0x07) // dem_stop
+                            break;
+
+                        var tick = br.ReadInt32();
+                        if (tick >= 0)
+                        {
+                            result.TotalTicks = tick;
+                        }
+
+
+                        switch (command)
+                        {
+                            case 0x01:
+                                br.BaseStream.Seek(signOnLen, SeekOrigin.Current);
+                                break;
+                            case 0x02:
+                            {
+                                br.BaseStream.Seek(4, SeekOrigin.Current); // skip flags
+
+                                var x = br.ReadSingle();
+                                var y = br.ReadSingle();
+                                var z = br.ReadSingle();
+                                result.CoordsList.Add(new Point3D((int) x, (int) y, (int) z));
+
+                                br.BaseStream.Seek(0x44, SeekOrigin.Current);
+
+                                var packetLen = br.ReadInt32();
+                                br.BaseStream.Seek(packetLen, SeekOrigin.Current);
+                            }
+                                break;
+                            case 0x04:
+                            {
+                                var concmdLen = br.ReadInt32();
+                                var concmd = ASCII.GetString(br.ReadBytes(concmdLen - 1));
+                                if (concmd.Contains("#SAVE#"))
+                                {
+                                    if (tick >= 0)
+                                    {
+                                        result.Flags.Add(new Flag(tick, tick*0.015f, "#SAVE#"));
+                                    }
+                                }
+                                foreach (var s in cheats.Where(concmd.Contains))
+                                {
+                                    result.Cheated = true;
+                                    result.Cheetz.Add(concmd);
+                                }
+                                if (concmd == "autosave")
+                                {
+                                    //Autosave happened.
+                                    if (tick >= 0)
+                                    {
+                                        result.Flags.Add(new Flag(tick, tick*0.015f, "autosave"));
+                                    }
+                                }
+                                if (concmd.StartsWith("+jump")) result.TotalJumps++;
+                                br.BaseStream.Seek(1, SeekOrigin.Current); // skip null terminator
+                            }
+                                break;
+                            case 0x05:
+                            {
+                                br.BaseStream.Seek(4, SeekOrigin.Current); // skip sequence//int test = br.ReadInt32();
+                                var userCmdLen = br.ReadInt32();
+                                br.BaseStream.Seek(userCmdLen, SeekOrigin.Current);
+                            }
+                                break;
+                            case 0x08:
+                            {
+                                var stringTableLen = br.ReadInt32();
+                                br.BaseStream.Seek(stringTableLen, SeekOrigin.Current);
+                            }
+                                break;
+                        }
+                    } while (command != 0x07); // dem_stop
+                    result.Suceeded = true;
+
+                    #endregion
+                }
+            }
+            catch (Exception e)
+            {
+                result.Suceeded = false;
+            }
+
+            #endregion
+
+            result.TotalTime = result.TotalTicks*0.015f; // 1 tick = 0.015s
+            return result;
+        }
+
+        public static GoldSourceDemoParseResult ParseGoldSourceDemo(string file, DEMO_TYPE type) //TODO: FIX
+        {
+            #region Goldsource demo parser
+
+            var result = new GoldSourceDemoParseResult();
+            result.Flags = new List<Flag>();
+            result.Cheetz = new List<string>();
+            if (HLDEMO_IsValidDemo(file))
+            {
+                if (HLDEMO_Open(file, 1) == IntPtr.Zero)
+                {
+                    result.Suceeded = false;
+                }
+                else
+                {
+                    var demoFile = HLDEMO_Open(file, 1);
+                    var demoFileDemoHeader = HLDEMO_DemoFileGetDemoHeader(demoFile);
+                    result.MapName = Marshal.PtrToStringAnsi(demoFileDemoHeader.mapName);
+                    result.Protocol = demoFileDemoHeader.demoProtocol.ToString();
+                    result.MapCrc = demoFileDemoHeader.mapCRC.ToString();
+                    result.DOffset = demoFileDemoHeader.directoryOffset.ToString();
+                    result.NProtocol = demoFileDemoHeader.netProtocol.ToString();
+                    result.Gamedir = Marshal.PtrToStringAnsi(demoFileDemoHeader.gameDir);
+                    var size = HLDEMO_GetDirectoryEntryCount(demoFile);
+                    for (var i = 0; i < size; i++)
+                    {
+                        var currentDemoDirectoryEntry =
+                            HLDEMO_GetDirectoryEntry(demoFile, i);
+                        var frameCount = HLDEMO_GetFrameCount(currentDemoDirectoryEntry.frame_data);
+                        for (var j = 0; j < frameCount; j++)
+                        {
+                            var currFrame = HLDEMO_GetFrame(
+                                currentDemoDirectoryEntry.frame_data, j);
+                            if (currFrame.type == (int) demo_frame_type.CONSOLE_COMMAND)
+                            {
+                                var command =
+                                    Marshal.PtrToStringAnsi(
+                                        HLDEMO_TreatAsConsoleCommandFrame(currFrame.frame_pointer).command);
+                                result.TotalTime = currFrame.time;
+                                //Console.WriteLine(command);
+                                result.Pframes = currFrame.frame;
+                                if (command != null)
+                                    foreach (var s in cheats.Where(command.Contains))
+                                    {
+                                        result.Cheated = true;
+                                        result.Cheetz.Add(command);
+                                    }
+                            }
+                        }
+                    }
+                    result.Suceeded = true;
+                }
+            }
+            else
+            {
+                result.Suceeded = false;
+            }
+            return result;
+
+            #endregion
+        }
+
+        public static DEMO_TYPE DetermineDemoType(string file)
+        {
+            DEMO_TYPE dt;
+            string mw;
+            using (var fs = new FileStream(file, FileMode.Open, FileAccess.Read))
+            using (var br = new BinaryReader(fs))
+            {
+                mw = ASCII.GetString(br.ReadBytes(8)).TrimEnd('\0');
+            }
+            switch (mw)
+            {
+                case "HLDEMO":
+                    dt = DEMO_TYPE.Goldsource;
+                    break;
+                case "HL2DEMO":
+                    dt = DEMO_TYPE.Source;
+                    break;
+                default:
+                    dt = DEMO_TYPE.Unknown;
+                    break;
+            }
+            return dt;
+        }
+
+        public class Point3D
+        {
+            public int X;
+            public int Y;
+            public int Z;
+
+            public Point3D(int x, int y, int z)
+            {
+                X = x;
+                Y = y;
+                Z = z;
+            }
+        }
+
         #region Pinvoke <3 YaLTeR
+
         [DllImport("HLDemo.dll", CharSet = CharSet.Ansi, CallingConvention = CallingConvention.Cdecl)]
         public static extern demo_header HLDEMO_DemoFileGetDemoHeader(IntPtr demofile);
 
@@ -72,6 +308,7 @@ namespace Listdemo
             public int mapCRC;
             public int directoryOffset;
         };
+
         [StructLayout(LayoutKind.Sequential)]
         public struct demo_directory_entry
         {
@@ -86,6 +323,7 @@ namespace Listdemo
             // Pass this to relevant functions.
             public IntPtr frame_data;
         }
+
         [StructLayout(LayoutKind.Sequential)]
         public struct demo_frame
         {
@@ -95,11 +333,13 @@ namespace Listdemo
             // Pass this to HLDEMO_TreatAs<x>Frame().
             public IntPtr frame_pointer;
         }
+
         [StructLayout(LayoutKind.Sequential)]
         public struct console_command_frame
         {
             public IntPtr command;
         }
+
         public enum demo_frame_type
         {
             DEMO_START = 2,
@@ -113,220 +353,111 @@ namespace Listdemo
         }
 
         #endregion
-        public static DemoParseResult ParseDemo(string file)
+
+        #region <3
+
+        [StructLayout(LayoutKind.Sequential)]
+        public struct hls_demo_header
         {
-            string[] cheats = { "host_timescale", "god", "sv_cheats", "buddha", "host_framerate", "sv_accelerate", "sv_airaccelerate", "noclip", "ent_fire" };
-            var result = new DemoParseResult();
-            var type = "";
-            using (var fs = new FileStream(file, FileMode.Open, FileAccess.Read))
-            using (var br = new BinaryReader(fs)){type = ASCII.GetString(br.ReadBytes(8)).TrimEnd('\0');}   
-                switch (type)
-                    {
-                        case "HL2DEMO": // Bug: not checking for missbehaving demos.  
-                            {
-                                result.DemoT = DemoParseResult.DemoType.Source;
-                                using (var fs = new FileStream(file, FileMode.Open, FileAccess.Read))
-                                using (var br = new BinaryReader(fs))
-                                {
-                                    #region Original HL2 Demo Parser
-                            br.ReadBytes(8);
-                                result.Protocol = (ToInt32(br.ReadBytes(4), 0)).ToString(InvariantCulture);
-                                result.NProtocol = (ToInt32(br.ReadBytes(4), 0)).ToString(InvariantCulture);
-                                result.ServerName = ASCII.GetString(br.ReadBytes(260)).TrimEnd('\0');
-                                result.PlayerName = ASCII.GetString(br.ReadBytes(260)).TrimEnd('\0');
-                                result.MapName = ASCII.GetString(br.ReadBytes(260)).TrimEnd('\0');
-                                result.GameName = ASCII.GetString(br.ReadBytes(260)).TrimEnd('\0'); // gamedir=gamename
+            public int netProtocol;
+            public int demoProtocol;
+            public IntPtr mapName;
+            public IntPtr gameDir;
+            public int directoryOffset;
+        }
 
-                                result.PTime = (Abs(ToInt32(br.ReadBytes(4), 0))).ToString(InvariantCulture);
-                                result.Pticks = (Abs(ToInt32(br.ReadBytes(4), 0))).ToString(InvariantCulture);
-                                result.Pframes = (Abs(ToInt32(br.ReadBytes(4), 0))).ToString(InvariantCulture);
-                                var signOnLen = br.ReadInt32();
-                                result.Flags = new List<Flag>();
-                                result.Cheetz = new List<string>();
+        [StructLayout(LayoutKind.Sequential)]
+        public struct hls_demo_directory_entry
+        {
+            public int tpye;
+            public int playbackTime;
+            public int frameCount;
+            public int offset;
+            public int fileLength;
+        }
 
-                                byte command;
-                                do
-                                {
-                                    command = br.ReadByte();
+        public enum hls_demo_frame_type
+        {
+            NETWORK_PACKET = 2,
+            JUMPTIME = 3,
+            CONSOLE_COMMAND = 4,
+            USERCMD = 5,
+            STRINGTABLES = 6,
+            NEXT_SECTION = 7
+        }
 
-                                    if (command == 0x07) // dem_stop
-                                        break;
+        [StructLayout(LayoutKind.Sequential)]
+        public struct hls_demo_frame
+        {
+            public int type;
+            public float time;
+            public int frame;
 
-                                    var tick = br.ReadInt32();
-                                    if (tick >= 0)
-                                    {
-                                        result.TotalTicks = tick;
-                                    }
+            public IntPtr frame_pointer;
+        }
 
+        [StructLayout(LayoutKind.Sequential)]
+        public struct hls_console_command_frame
+        {
+            public IntPtr command;
+        }
 
-                                    switch (command)
-                                    {
-                                        case 0x01:
-                                            br.BaseStream.Seek(signOnLen, SeekOrigin.Current);
-                                            break;
-                                        case 0x02:
-                                            {
-                                                br.BaseStream.Seek(4, SeekOrigin.Current); // skip flags
+        [DllImport("HLDemo.dll", CharSet = CharSet.Ansi, CallingConvention = CallingConvention.Cdecl)]
+        public static extern int HLSDEMO_IsValidDemo([MarshalAs(UnmanagedType.LPStr)] string lpString);
 
-                                                var x = br.ReadSingle();
-                                                var y = br.ReadSingle();
-                                                var z = br.ReadSingle();
-                                                result.X = x;
-                                                result.Y = y;
-                                                result.Z = z;
+        [DllImport("HLDemo.dll", CharSet = CharSet.Ansi, CallingConvention = CallingConvention.Cdecl)]
+        public static extern IntPtr HLSDEMO_Open([MarshalAs(UnmanagedType.LPStr)] string lpString, int read_frames);
 
-                                                br.BaseStream.Seek(0x44, SeekOrigin.Current);
+        [DllImport("HLDemo.dll", CharSet = CharSet.Ansi, CallingConvention = CallingConvention.Cdecl)]
+        public static extern void HLSDEMO_Close(IntPtr demo_file);
 
-                                                var packetLen = br.ReadInt32();
-                                                br.BaseStream.Seek(packetLen, SeekOrigin.Current);
-                                            }
-                                            break;
-                                        case 0x04:
-                                            {
-                                                var concmdLen = br.ReadInt32();
-                                                var concmd = ASCII.GetString(br.ReadBytes(concmdLen - 1));
-                                                if (concmd.Contains("#SAVE#"))
-                                                {
-                                                    if (tick >= 0)
-                                                    {
-                                                        result.Flags.Add(new Flag(tick, tick * 0.015f, "#SAVE#"));
-                                                    }
-                                                }
-                                                foreach (var s in cheats.Where(concmd.Contains))
-                                                {
-                                                    result.Cheated = true;
-                                                    result.Cheetz.Add(concmd);
-                                                }
-                                                if (concmd == "autosave")
-                                                {
-                                                    //Autosave happened.
-                                                    if (tick >= 0)
-                                                    {
-                                                        result.Flags.Add(new Flag(tick, tick * 0.015f, "autosave"));
-                                                    }
-                                                }
-                                                if (concmd.StartsWith("+jump")) result.TotalJumps++;
-                                                br.BaseStream.Seek(1, SeekOrigin.Current); // skip null terminator
-                                            }
-                                            break;
-                                        case 0x05:
-                                            {
-                                                br.BaseStream.Seek(4, SeekOrigin.Current); // skip sequence//int test = br.ReadInt32();
-                                                var userCmdLen = br.ReadInt32();
-                                                br.BaseStream.Seek(userCmdLen, SeekOrigin.Current);
-                                            }
-                                            break;
-                                        case 0x08:
-                                            {
-                                                var stringTableLen = br.ReadInt32();
-                                                br.BaseStream.Seek(stringTableLen, SeekOrigin.Current);
-                                            }
-                                            break;
-                                    }
-                                } while (command != 0x07); // dem_stop
-                            #endregion
-                                }       
-                                break;
-                            }
-                        case "HLDEMO": //BUG: "Half-Life:Source" Demos crash it.
-                            {
-                            #region Goldsource demo parser
-                            result.Flags = new List<Flag>();
-                            result.Cheetz = new List<string>();
-                                if (HLDEMO_IsValidDemo(file))
-                                {
-                                     result.DemoT = DemoParseResult.DemoType.Goldsource;
-                                     IntPtr demoFile = HLDEMO_Open(file, 1);
-                                     demo_header demoFileDemoHeader = HLDEMO_DemoFileGetDemoHeader(demoFile);
-                                     result.MapName = Marshal.PtrToStringAnsi(demoFileDemoHeader.mapName);
-                                     result.Protocol = demoFileDemoHeader.demoProtocol.ToString();
-                                     result.MapCrc = demoFileDemoHeader.mapCRC.ToString();
-                                     result.DOffset = demoFileDemoHeader.directoryOffset.ToString();
-                                     result.NProtocol = demoFileDemoHeader.netProtocol.ToString();
-                                     result.GameName = "Half-Life";
-                                     result.Gamedir = Marshal.PtrToStringAnsi(demoFileDemoHeader.gameDir);
-                                    var size = HLDEMO_GetDirectoryEntryCount(demoFile);
-                                    for (int i = 0; i < size; i++)
-                                    {
-                                        demo_directory_entry currentDemoDirectoryEntry =
-                                            HLDEMO_GetDirectoryEntry(demoFile, i);
-                                        int frameCount = HLDEMO_GetFrameCount(currentDemoDirectoryEntry.frame_data);
-                                        for (int j = 0; j < frameCount; j++)
-                                        {
-                                            demo_frame currFrame = HLDEMO_GetFrame(
-                                                currentDemoDirectoryEntry.frame_data, j);
-                                            if (currFrame.type == (int)demo_frame_type.CONSOLE_COMMAND)
-                                            {
-                                                var command = Marshal.PtrToStringAnsi(HLDEMO_TreatAsConsoleCommandFrame(currFrame.frame_pointer).command);
-                                                result.TotalTime = currFrame.time;
-                                                //Console.WriteLine(command);
-                                                result.Pframes = currFrame.frame.ToString();
-                                                if (command != null)
-                                                    foreach (var s in cheats.Where(command.Contains))
-                                                    {
-                                                        result.Cheated = true;
-                                                        result.Cheetz.Add(command);
-                                                    }
-                                            }
-                                        }
-                                    }
-                                }
-                                else
-                                {
-                                    result.DemoT = DemoParseResult.DemoType.Nonsupported;
-                                }
-                                #endregion
-                        break;
-                            }
-                        default: // Set everything to blank and print that we don't know how to deal with this.
-                            {
-                                result.DemoT = DemoParseResult.DemoType.Nonsupported;
-                                #region Game not supported
+        [DllImport("HLDemo.dll", CharSet = CharSet.Ansi, CallingConvention = CallingConvention.Cdecl)]
+        public static extern hls_demo_header HLSDEMO_DemoFileGetDemoHeader(IntPtr demo_file);
 
-                                Console.WriteLine("Game not supported :/");
-                                Console.WriteLine();
-                                result.Cheated = false;
-                                result.Cheetz = new List<string>();
-                                result.CrosshairAppearTick = 0;
-                                result.CrosshairDisappearTick = 0;
-                                result.TotalTicks = 0;
-                                result.TotalTime = 0;
-                                result.MapName = "-";
-                                result.PlayerName = "-";
-                                result.PlayerName = "-";
-                                result.PTime = "-";
-                                result.TotalJumps = 0;
-                                result.Pframes = "-";
-                                result.Pticks = "-";
-                                result.Protocol = "-";
-                                result.NProtocol = "-";
-                                result.ServerName = "-";
-                                result.X = 0;
-                                result.Y = 0;
-                                result.Z = 0;
-                                #endregion
-                                break;
-                            }
-                }
-                result.TotalTime = result.TotalTicks * 0.015f; // 1 tick = 0.015s
-                return result;
-            }
+        [DllImport("HLDemo.dll", CharSet = CharSet.Ansi, CallingConvention = CallingConvention.Cdecl)]
+        public static extern void HLSDEMO_DemoFileReadFrames(IntPtr demo_file);
+
+        [DllImport("HLDemo.dll", CharSet = CharSet.Ansi, CallingConvention = CallingConvention.Cdecl)]
+        public static extern int HLSDEMO_DemoFileDidReadFrames(IntPtr demo_file);
+
+        [DllImport("HLDemo.dll", CharSet = CharSet.Ansi, CallingConvention = CallingConvention.Cdecl)]
+        public static extern int HLSDEMO_GetDirectoryEntryCount(IntPtr demo_file);
+
+        [DllImport("HLDemo.dll", CharSet = CharSet.Ansi, CallingConvention = CallingConvention.Cdecl)]
+        public static extern hls_demo_directory_entry HLSDEMO_GetDirectoryEntry(IntPtr demo_file, int index);
+
+        [DllImport("HLDemo.dll", CharSet = CharSet.Ansi, CallingConvention = CallingConvention.Cdecl)]
+        public static extern int HLSDEMO_GetFrameCount(IntPtr frame_data);
+
+        [DllImport("HLDemo.dll", CharSet = CharSet.Ansi, CallingConvention = CallingConvention.Cdecl)]
+        public static extern hls_demo_frame HLSDEMO_GetFrame(IntPtr frame_data, int index);
+
+        [DllImport("HLDemo.dll", CharSet = CharSet.Ansi, CallingConvention = CallingConvention.Cdecl)]
+        public static extern hls_console_command_frame HLSDEMO_TreatAsConsoleCommandFrame(IntPtr frame_pointer);
+
+        #endregion
     }
 
-    [Serializable]
-    public class DemoParseResult
+    public class SourceDemoParseResult
     {
-        public bool Cheated { get; set; } = false;
-        public List<string> Cheetz { get; set; } 
+        public SourceDemoParseResult()
+        {
+            CrosshairAppearTick = -1;
+            CrosshairDisappearTick = -1;
+        }
+
+        public string demo_header { get; set; }
+        public bool Cheated { get; set; }
+        public List<string> Cheetz { get; set; }
         public List<Flag> Flags { get; set; }
         public int CrosshairAppearTick { get; set; }
         public int CrosshairDisappearTick { get; set; }
-        public int TotalTicks { get; set; } = 0;
-        public float TotalTime { get; set; } = 0;
+        public int TotalTicks { get; set; }
+        public float TotalTime { get; set; }
         public string MapName { get; set; } = "-";
         public string PlayerName { get; set; } = "-";
         public string GameName { get; set; } = "-";
-        public int TotalJumps { get; set; } = 0;
+        public int TotalJumps { get; set; }
         public string PTime { get; set; } = "-";
         public string Pframes { get; set; } = "-";
         public string Pticks { get; set; } = "-";
@@ -336,20 +467,23 @@ namespace Listdemo
         public string MapCrc { get; set; } = "-";
         public string Gamedir { get; set; } = "-";
         public string DOffset { get; set; } = "-";
-        public float X { get; set; } = 0f;
-        public float Y { get; set; } = 0f;
-        public float Z { get; set; } = 0f;
-        public enum DemoType
-        {
-            Source,
-            Goldsource,
-            Nonsupported
-        }
-        public DemoType DemoT{get;set;} = DemoType.Nonsupported;
-        public DemoParseResult()
-        {
-            CrosshairAppearTick = -1;
-            CrosshairDisappearTick = -1;
-        }
+        public bool Suceeded { get; set; }
+        public List<DemoParser.Point3D> CoordsList { get; set; }
+    }
+
+    public class GoldSourceDemoParseResult
+    {
+        public List<Flag> Flags { get; set; }
+        public List<string> Cheetz { get; set; }
+        public bool Suceeded { get; set; }
+        public bool Cheated { get; set; }
+        public string MapName { get; set; }
+        public string Protocol { get; set; }
+        public string MapCrc { get; set; }
+        public string DOffset { get; set; }
+        public string NProtocol { get; set; }
+        public string Gamedir { get; set; }
+        public float TotalTime { get; set; }
+        public int Pframes { get; set; }
     }
 }
