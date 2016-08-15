@@ -1,0 +1,6 @@
+D:\Speedrun\PROGRAMMING\Listdemo\Listdemo\bin\Release\Listdemo.exe.config
+D:\Speedrun\PROGRAMMING\Listdemo\Listdemo\bin\Release\Listdemo.exe
+D:\Speedrun\PROGRAMMING\Listdemo\Listdemo\bin\Release\Listdemo.pdb
+D:\Speedrun\PROGRAMMING\Listdemo\Listdemo\obj\Release\Listdemo.exe
+D:\Speedrun\PROGRAMMING\Listdemo\Listdemo\obj\Release\Listdemo.pdb
+D:\Speedrun\PROGRAMMING\Listdemo\Listdemo\obj\Release\Listdemo.csprojResolveAssemblyReference.cache

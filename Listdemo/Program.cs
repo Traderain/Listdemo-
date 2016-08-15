@@ -14,6 +14,7 @@ namespace Listdemo
         {
             Title = "λ - Sourceruns listdemo by Traderain - λ";
             ConsoleHelper.SetConsoleIcon(SystemIcons.Information);
+            Console.OutputEncoding = System.Text.Encoding.Unicode;
             var datapath = Environment.GetFolderPath(Environment.SpecialFolder.Desktop);
             try
             {

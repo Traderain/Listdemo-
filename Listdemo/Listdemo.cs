@@ -42,9 +42,8 @@ namespace Listdemo
 
         public static SourceDemoParseResult ParseDemo(string file, DEMO_TYPE DemoType)
         {
-            var result = new SourceDemoParseResult();
-
             #region Source Demo Parser
+            var result = new SourceDemoParseResult();
 
             try
             {
@@ -108,6 +107,7 @@ namespace Listdemo
                             {
                                 var concmdLen = br.ReadInt32();
                                 var concmd = ASCII.GetString(br.ReadBytes(concmdLen - 1));
+                                result.CMDs.Add(concmd);
                                 if (concmd.Contains("#SAVE#"))
                                 {
                                     if (tick >= 0)
@@ -156,14 +156,12 @@ namespace Listdemo
             {
                 result.Suceeded = false;
             }
-
-            #endregion
-
             result.TotalTime = result.TotalTicks*0.015f; // 1 tick = 0.015s
             return result;
+            #endregion
         }
 
-        public static GoldSourceDemoParseResult ParseGoldSourceDemo(string file, DEMO_TYPE type) //TODO: FIX
+        public static GoldSourceDemoParseResult ParseGoldSourceDemo(string file, DEMO_TYPE type)
         {
             #region Goldsource demo parser
 
@@ -174,7 +172,57 @@ namespace Listdemo
             {
                 if (HLDEMO_Open(file, 1) == IntPtr.Zero)
                 {
-                    result.Suceeded = false;
+                    if (HLSDEMO_IsValidDemo(file))
+                    {
+                        if (HLSDEMO_Open(file, 1) == IntPtr.Zero)
+                        {
+                            result.Suceeded = true;
+                            var demoFile = HLSDEMO_Open(file, 1);
+                            var demoFileDemoHeader = HLSDEMO_DemoFileGetDemoHeader(demoFile);
+                            result.MapName = Marshal.PtrToStringAnsi(demoFileDemoHeader.mapName);
+                            result.Protocol = demoFileDemoHeader.demoProtocol.ToString();
+                            result.MapCrc = demoFileDemoHeader.ToString();
+                            result.DOffset = demoFileDemoHeader.directoryOffset.ToString();
+                            result.NProtocol = demoFileDemoHeader.netProtocol.ToString();
+                            result.Gamedir = Marshal.PtrToStringAnsi(demoFileDemoHeader.gameDir);
+                            var size = HLDEMO_GetDirectoryEntryCount(demoFile);
+                            for (var i = 0; i < size; i++)
+                            {
+                                var currentDemoDirectoryEntry =
+                                    HLDEMO_GetDirectoryEntry(demoFile, i);
+                                var frameCount = HLDEMO_GetFrameCount(currentDemoDirectoryEntry.frame_data);
+                                for (var j = 0; j < frameCount; j++)
+                                {
+                                    var currFrame = HLDEMO_GetFrame(
+                                        currentDemoDirectoryEntry.frame_data, j);
+                                    if (currFrame.type == (int) demo_frame_type.CONSOLE_COMMAND)
+                                    {
+                                        var command =
+                                            Marshal.PtrToStringAnsi(
+                                                HLDEMO_TreatAsConsoleCommandFrame(currFrame.frame_pointer).command);
+                                        result.TotalTime = currFrame.time;
+                                        result.CMDs.Add(command);
+                                        result.Pframes = currFrame.frame;
+                                        if (command != null)
+                                            foreach (var s in cheats.Where(command.Contains))
+                                            {
+                                                result.Cheated = true;
+                                                result.Cheetz.Add(command);
+                                            }
+                                    }
+                                }
+                            }
+                        }
+                        else
+                        {
+                            result.Suceeded = false;
+                        }
+                    }
+                    else
+                    {
+                        result.Suceeded = false;
+                    }
+                    
                 }
                 else
                 {
@@ -202,7 +250,7 @@ namespace Listdemo
                                     Marshal.PtrToStringAnsi(
                                         HLDEMO_TreatAsConsoleCommandFrame(currFrame.frame_pointer).command);
                                 result.TotalTime = currFrame.time;
-                                //Console.WriteLine(command);
+                                result.CMDs.Add(command);
                                 result.Pframes = currFrame.frame;
                                 if (command != null)
                                     foreach (var s in cheats.Where(command.Contains))
@@ -402,37 +450,37 @@ namespace Listdemo
             public IntPtr command;
         }
 
-        [DllImport("HLDemo.dll", CharSet = CharSet.Ansi, CallingConvention = CallingConvention.Cdecl)]
-        public static extern int HLSDEMO_IsValidDemo([MarshalAs(UnmanagedType.LPStr)] string lpString);
+        [DllImport("HLSDemo.dll", CharSet = CharSet.Ansi, CallingConvention = CallingConvention.Cdecl)]
+        public static extern bool HLSDEMO_IsValidDemo([MarshalAs(UnmanagedType.LPStr)] string lpString);
 
-        [DllImport("HLDemo.dll", CharSet = CharSet.Ansi, CallingConvention = CallingConvention.Cdecl)]
+        [DllImport("HLSDemo.dll", CharSet = CharSet.Ansi, CallingConvention = CallingConvention.Cdecl)]
         public static extern IntPtr HLSDEMO_Open([MarshalAs(UnmanagedType.LPStr)] string lpString, int read_frames);
 
-        [DllImport("HLDemo.dll", CharSet = CharSet.Ansi, CallingConvention = CallingConvention.Cdecl)]
+        [DllImport("HLSDemo.dll", CharSet = CharSet.Ansi, CallingConvention = CallingConvention.Cdecl)]
         public static extern void HLSDEMO_Close(IntPtr demo_file);
 
-        [DllImport("HLDemo.dll", CharSet = CharSet.Ansi, CallingConvention = CallingConvention.Cdecl)]
+        [DllImport("HLSDemo.dll", CharSet = CharSet.Ansi, CallingConvention = CallingConvention.Cdecl)]
         public static extern hls_demo_header HLSDEMO_DemoFileGetDemoHeader(IntPtr demo_file);
 
-        [DllImport("HLDemo.dll", CharSet = CharSet.Ansi, CallingConvention = CallingConvention.Cdecl)]
+        [DllImport("HLSDemo.dll", CharSet = CharSet.Ansi, CallingConvention = CallingConvention.Cdecl)]
         public static extern void HLSDEMO_DemoFileReadFrames(IntPtr demo_file);
 
-        [DllImport("HLDemo.dll", CharSet = CharSet.Ansi, CallingConvention = CallingConvention.Cdecl)]
-        public static extern int HLSDEMO_DemoFileDidReadFrames(IntPtr demo_file);
+        [DllImport("HLSDemo.dll", CharSet = CharSet.Ansi, CallingConvention = CallingConvention.Cdecl)]
+        public static extern bool HLSDEMO_DemoFileDidReadFrames(IntPtr demo_file);
 
-        [DllImport("HLDemo.dll", CharSet = CharSet.Ansi, CallingConvention = CallingConvention.Cdecl)]
+        [DllImport("HLSDemo.dll", CharSet = CharSet.Ansi, CallingConvention = CallingConvention.Cdecl)]
         public static extern int HLSDEMO_GetDirectoryEntryCount(IntPtr demo_file);
 
-        [DllImport("HLDemo.dll", CharSet = CharSet.Ansi, CallingConvention = CallingConvention.Cdecl)]
+        [DllImport("HLSDemo.dll", CharSet = CharSet.Ansi, CallingConvention = CallingConvention.Cdecl)]
         public static extern hls_demo_directory_entry HLSDEMO_GetDirectoryEntry(IntPtr demo_file, int index);
 
-        [DllImport("HLDemo.dll", CharSet = CharSet.Ansi, CallingConvention = CallingConvention.Cdecl)]
-        public static extern int HLSDEMO_GetFrameCount(IntPtr frame_data);
+        [DllImport("HLSDemo.dll", CharSet = CharSet.Ansi, CallingConvention = CallingConvention.Cdecl)]
+        public static extern bool HLSDEMO_GetFrameCount(IntPtr frame_data);
 
-        [DllImport("HLDemo.dll", CharSet = CharSet.Ansi, CallingConvention = CallingConvention.Cdecl)]
+        [DllImport("HLSDemo.dll", CharSet = CharSet.Ansi, CallingConvention = CallingConvention.Cdecl)]
         public static extern hls_demo_frame HLSDEMO_GetFrame(IntPtr frame_data, int index);
 
-        [DllImport("HLDemo.dll", CharSet = CharSet.Ansi, CallingConvention = CallingConvention.Cdecl)]
+        [DllImport("HLSDemo.dll", CharSet = CharSet.Ansi, CallingConvention = CallingConvention.Cdecl)]
         public static extern hls_console_command_frame HLSDEMO_TreatAsConsoleCommandFrame(IntPtr frame_pointer);
 
         #endregion
@@ -450,6 +498,7 @@ namespace Listdemo
         public bool Cheated { get; set; }
         public List<string> Cheetz { get; set; }
         public List<Flag> Flags { get; set; }
+        public List<string> CMDs { get; set; }
         public int CrosshairAppearTick { get; set; }
         public int CrosshairDisappearTick { get; set; }
         public int TotalTicks { get; set; }
@@ -475,6 +524,7 @@ namespace Listdemo
     {
         public List<Flag> Flags { get; set; }
         public List<string> Cheetz { get; set; }
+        public List<string> CMDs { get; set; }
         public bool Suceeded { get; set; }
         public bool Cheated { get; set; }
         public string MapName { get; set; }

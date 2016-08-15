@@ -1,0 +1,5 @@
+D:\Speedrun\PROGRAMMING\Listdemo\Listdemo\bin\x64\Debug\Listdemo.exe.config
+D:\Speedrun\PROGRAMMING\Listdemo\Listdemo\bin\x64\Debug\Listdemo.exe
+D:\Speedrun\PROGRAMMING\Listdemo\Listdemo\bin\x64\Debug\Listdemo.pdb
+D:\Speedrun\PROGRAMMING\Listdemo\Listdemo\obj\x64\Debug\Listdemo.exe
+D:\Speedrun\PROGRAMMING\Listdemo\Listdemo\obj\x64\Debug\Listdemo.pdb
